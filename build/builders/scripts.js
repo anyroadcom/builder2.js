@@ -394,7 +394,8 @@
 }).apply(this, Function("return [this, function GeneratorFunction(){}]")());
 
 var debug = require('debug')('component-builder:scripts');
-var relative = require('path').relative;
+var path = require('path');
+var relative = path.relative;
 var requires = require('requires');
 var fs = require('graceful-fs');
 var url = require('url');
@@ -465,9 +466,9 @@ Scripts.umd = function (canonical, alias, js) {
     + 'if (typeof exports == "object") {\n'
     + '  module.exports = require("' + canonical + '");\n'
     + '} else if (typeof define == "function" && define.amd) {\n'
-    +'  define([], function(){ return require("' + canonical + '"); });\n'
+    +'  define("' + canonical + '", [], function(){ return require("' + canonical + '"); });\n'
     + '} else {\n'
-    + '  this["' + alias + '"] = require("' + canonical + '");\n'
+    + '  (this || window)["' + alias + '"] = require("' + canonical + '");\n'
     + '}\n'
     + '})()\n';
 }
@@ -614,6 +615,12 @@ Scripts.prototype.register = function (file) {
     return 'require(' + quote
       + self.lookup(file, require.path)
       + quote + ')';
+  });
+
+  // rewrite asset paths
+  js = assetPaths(js, function (asset) {
+    asset = relative(file.manifest.path, path.resolve(path.dirname(file.filename), asset));
+    return path.join(utils.rewriteUrl(file.branch), asset);
   });
 
   var name = file.name;
@@ -813,10 +820,10 @@ Scripts.prototype.lookupDependency = function (file, target) {
   for (var i = 0; i < localDeps.length; i++) {
     // Find a local dependency that matches as a prefix of the target
     // or the whole target, and return the canonical path.
-    var re = new RegExp("^("+localDeps[i]+")(.*)$");
+    var re = new RegExp("^("+localDeps[i]+")(/.*)?$");
     if (m = re.exec(target)) {
       var dep = m[1];
-      var tail = m[2];
+      var tail = m[2] || '';
       return branch.locals[dep].canonical + tail;
     }
   }
@@ -842,4 +849,13 @@ Scripts.prototype.lookupDependency = function (file, target) {
   // to do: look up stuff outside the dependencies
   debug('could not resolve "%s" from "%s"', target, file.name)
   return target
+}
+
+// private helpers
+
+function assetPaths(source, replacer) {
+  return source.replace(/\/\* component:file \*\/\s+['"](\S+)['"]/g, function (match, p1) {
+    var replacement = replacer(p1);
+    return replacement ? JSON.stringify(replacement) : match;
+  });
 }

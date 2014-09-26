@@ -90,6 +90,36 @@ describe('js-nested-locals', function() {
   })
 })
 
+describe('js-matching-prefixes', function() {
+  var tree
+  var js = Builder.require
+
+  it('should install', co(function* () {
+    tree = yield* resolve(fixture('js-matching-prefixes'), options)
+  }))
+
+  it('should build', co(function* () {
+    js += yield build(tree).end();
+  }))
+
+
+  it('should rewrite the component require correctly', function() {
+    js.should.not.include("require('test')")
+    js.should.not.include("require('test_again')")
+
+    js.should.include("require('./lib1/test')")
+    js.should.include("require('./lib2/test_again')")
+  })
+
+  it('should execute', function () {
+    var ctx = vm.createContext()
+    vm.runInContext(js, ctx)
+    vm.runInContext('this.test = require("js-matching-prefixes")', ctx)
+    ctx.test.test_name.should.equal('test')
+    ctx.test.test_again_name.should.equal('test_again')
+  })
+})
+
 describe('js-scripts -dev', function () {
   var tree
   var js = Builder.require
@@ -475,4 +505,62 @@ describe('js-require-single-quotes', function () {
     js.should.include("require(\'js-require-single-quotes/something.js\')")
     js.should.not.include('require("js-require-single-quotes/something.js")')
   })
+})
+
+describe('js-locals', function () {
+  var tree;
+  var js = Builder.require;
+
+  it('should install', co(function* () {
+    tree = yield* resolve(fixture('js-locals'), options);
+  }))
+
+  it('should build', co(function* () {
+    js += yield build(tree).end();
+  }))
+
+  it('should rewrite requires for files inside locals', function  () {
+    console.log(js);
+    js.should.not.include("require('subcomponent-1')");
+    js.should.not.include('require("subcomponent-1")');
+    js.should.not.include("require('subcomponent-1/hello')");
+    js.should.not.include('require("subcomponent-1/hello")');
+
+    js.should.include("require('./subcomponents/subcomponent-1')");
+    js.should.include("require('./subcomponents/subcomponent-1/hello')");
+  })
+
+  it('should execute', function () {
+    var ctx = vm.createContext();
+    vm.runInContext(js, ctx);
+  })
+})
+
+describe('js-asset-path', function () {
+  var tree;
+  var js = Builder.require;
+
+  it('should install', co(function* () {
+    tree = yield* resolve(fixture('js-asset-path'), options);
+  }))
+
+  it('should build', co(function* () {
+    js += yield build(tree).end();
+  }))
+
+  it('should execute', function () {
+    var ctx = vm.createContext();
+    vm.runInContext(js, ctx);
+    vm.runInContext('require("js-asset-path")', ctx);
+  })
+
+  it('should rewrite asset path comments', function () {
+    js.should.not.include('/* component:file */ "test.txt"');
+    js.should.include('"js-asset-path/test.txt"');
+  });
+
+  it("should be able to handle relative paths", function () {
+    js.should.not.include('/* component:file */ "../assets/foo.txt"');
+    js.should.include('"js-asset-path/assets/foo.txt"');
+  });
 })
